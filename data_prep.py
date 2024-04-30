@@ -5,8 +5,9 @@ from sklearn.preprocessing import StandardScaler
 class DataPrep(object):
     def __init__(self):
         self.base_path = './data/'
-        self.id_columns = ['id', 'ticker', 'sector', 'size_grp']
+        self.id_columns = ['date', 'id', 'ticker', 'sector', 'size_grp']
         self.ret_col = ['ret_exc_lead1m']
+        self.feature_col = None
     
     def display_df_size(func):
         # Decorator to print the DataFrame size
@@ -69,10 +70,21 @@ class DataPrep(object):
         
         # Normalize all numerical data
         scaler = StandardScaler()
-        self.stock_data[[col for col in self.stock_data.columns if col not in self.id_columns]]  = scaler.fit_transform(self.stock_data[[col for col in self.stock_data.columns if col not in self.id_columns]])
+        self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]]  = scaler.fit_transform(self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]])
+        
+        # Rearrange data
+        self.feature_col = [item for item in self.stock_data.columns if item not in (self.id_columns+self.ret_col)]
+
+        self.stock_data = self.stock_data[self.id_columns+self.feature_col+self.ret_col]
         
         print('data construction complete')
         return self.stock_data
+    
+    @display_df_size
+    def data_clean_na(self):
+        self.stock_data = self.stock_data.dropna(axis=0)
+        return self.stock_data
+    
     
     def data_slicing(self):
         # Stock id data
