@@ -9,8 +9,7 @@ class DataPrep(object):
         self.ret_col = ['ret_exc_lead1m']
         self.feature_col = None
     
-    def display_df_size(func):
-        # Decorator to print the DataFrame size
+    def _display_df_size(func):
         def wrapper(self, *args, **kwargs):
             df = func(self, *args, **kwargs)
             if isinstance(df, pd.DataFrame):
@@ -18,7 +17,7 @@ class DataPrep(object):
             return df
         return wrapper
     
-    @display_df_size
+    @_display_df_size
     def data_initialization(self):
         """_summary_
         Read in relevant data
@@ -28,9 +27,8 @@ class DataPrep(object):
         self.unique_ticker_sector_mapper = pd.read_csv(f'{self.base_path}ticker2sector.csv')[['Symbol', 'Sector']].to_dict('records')
         
         print('data initialized')
-        return self.stock_data
     
-    @display_df_size
+    @_display_df_size
     def data_construction(self):
         """_summary_
         Since the data I expected was not in one place, therefore I had to improvise and remap relevant information. Including dropping some records that I don't recognize
@@ -78,12 +76,6 @@ class DataPrep(object):
         self.stock_data = self.stock_data[self.id_columns+self.feature_col+self.ret_col]
         
         print('data construction complete')
-        return self.stock_data
-    
-    @display_df_size
-    def data_clean_na(self):
-        self.stock_data = self.stock_data.dropna(axis=0)
-        return self.stock_data
     
     
     def data_slicing(self):

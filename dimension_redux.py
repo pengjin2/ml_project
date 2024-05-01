@@ -3,44 +3,59 @@ from data_prep import DataPrep
 import pandas as pd
 import numpy as np
 
-from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.decomposition import PCA, TruncatedSVD, FactorAnalysis
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
 class DimensionRedux(DataPrep):
     def __init__(self):
         super().__init__()
+    
+    @DataPrep._display_df_size   
+    def data_clean_na(self, df):
+        df = df.dropna(axis=0)
+        return df
         
-    def generate_ret_class(self):
-        class_bins = [-9999999]+[self.stock_data['ret_exc_lead1m'].quantile(i) for i in np.arange(0,1,0.2)]+[9999999999]
-        self.stock_data['ret_class'] = pd.cut(self.stock_data['ret_exc_lead1m'], class_bins, labels=[1,2,3,4,5,6]).astype(int)
+    def generate_ret_class(self, df, n=5):
+        class_bins = [-9999999]+[df['ret_exc_lead1m'].quantile(i) for i in np.arange(0,1,1/n)]+[9999999999]
+        df['ret_class'] = pd.cut(df['ret_exc_lead1m'], class_bins, labels=[i+1 for i in range(n+1)]).astype(int)
+        return df
         
     def pca_fit(self):
         """_summary_
+        Reducing the dimensionality of the dataset by identifying the principal components that capture the most variance in the data.
         """
         # Remove missing values
-        self.data_clean_na()
-        self.generate_ret_class()
-        # TODO: Check for missing values 
+        stock_data = self.data_clean_na(df=self.stock_data).copy()
+        # Set Return class
+        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        
+        # Check for missing values 
+        if stock_data.isnull().any().any():
+            raise ValueError('Missing Values are not allowed in PCA Method')
+        
         # Model Fitting and generate compressed components
         pca = PCA()   
-        stock_df_pca_model_obj = pca.fit(self.stock_data[self.feature_col])
+        stock_df_pca_model_obj = pca.fit(stock_data[self.feature_col])
+        
+        # Construct new reduced df stat 
         pca_index_val = np.arange(0, len(stock_df_pca_model_obj.explained_variance_ratio_), 1)
         pca_index_rename = [f'comp_{i}' for i in pca_index_val]
         pca_var = stock_df_pca_model_obj.explained_variance_ratio_
         pca_cumu_var = stock_df_pca_model_obj.explained_variance_ratio_.cumsum()
         pca_result_df = pd.DataFrame([pca_index_val, pca_index_rename, pca_var, pca_cumu_var]).T
         pca_result_df.columns = ['index_values', 'renamed_columns', 'expl_var', 'expl_var_cumu']
+        
         # Find out when did we reach 80% explanation of variance
         pca_result_df_80 = pca_result_df[pca_result_df.expl_var_cumu<=0.8].copy()
-        stock_df_trans = pd.DataFrame(data=pca.transform(self.stock_data[self.feature_col]))
+        stock_df_trans = pd.DataFrame(data=pca.transform(stock_data[self.feature_col]))
         stock_df_trans_80 = stock_df_trans[pca_result_df_80.index_values]
         stock_df_trans_80.columns = pca_result_df_80.renamed_columns
-        stock_df_trans_80 = pd.concat([self.stock_data[self.id_columns].reset_index(), stock_df_trans_80.reset_index(), self.stock_data[self.ret_col].reset_index()], axis=1)
+        stock_df_trans_80 = pd.concat([stock_data[self.id_columns].reset_index(), stock_df_trans_80.reset_index(), stock_data[self.ret_col+['ret_class']].reset_index()], axis=1)
         
         # Some Visualizations
         # Visualize Variance Explained
@@ -76,41 +91,33 @@ class DimensionRedux(DataPrep):
         Perform LDA to reduce dimensions focusing on maximizing class separation.
         """
         
-        # Remove missing values (if any)
-        self.data_clean_na()
-        self.generate_ret_class()
+        # Remove missing values
+        stock_data = self.data_clean_na(df=self.stock_data).copy()
+        # Set Return class
+        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
         
-        # Determine how many components to keep
-        # Assuming X is your feature matrix and y are your labels
-        max_components = min(len(np.unique(self.stock_data['ret_class'])) - 1, self.stock_data[self.feature_col].shape[1])
-        scores = []
-        for n in range(1, max_components + 1):
-            lda = LDA(n_components=n)
-            # pipeline = make_pipeline(lda, )
-            cv_scores = cross_val_score(lda, self.stock_data[self.feature_col], self.stock_data['ret_class'], cv=StratifiedKFold(5), scoring='accuracy')
-            print(cv_scores)
-            scores.append(np.mean(cv_scores))
-
-        plt.plot(range(1, max_components + 1), scores)
-        plt.xlabel('Number of Components')
-        plt.ylabel('CV Accuracy')
-        plt.show()
-
-        best_n_components = np.argmax(scores) + 1
-        print(f"Best number of components: {best_n_components}")
+        # Check for missing values 
+        if stock_data.isnull().any().any():
+            raise ValueError('Missing Values are not allowed in LDA Method')
         
         # Fit LDA model
-        lda_act_model = LDA(n_components=best_n_components)  # Using 2 components as an example
-        stock_data_lda = lda_act_model.fit_transform(self.stock_data[self.feature_col], self.stock_data['ret_class'])
+        lda_act_model = LDA()
+        # define model evaluation method
+        cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
+        # evaluate model
+        scores = cross_val_score(lda_act_model, stock_data[self.feature_col], stock_data['ret_class'], scoring='accuracy', cv=cv, n_jobs=-1)
+        print('Mean Accuracy: %.3f (%.3f)' % (np.mean(scores), np.std(scores))) 
+        
+        stock_data_lda = lda_act_model.fit_transform(stock_data[self.feature_col], stock_data['ret_class'])
         
         # Create a DataFrame for the LDA components
         lda_columns = ['lda_comp_{}'.format(i) for i in range(stock_data_lda.shape[1])]
         stock_data_lda_df = pd.DataFrame(stock_data_lda, columns=lda_columns)
         
         # Merge with key columns and target for further analysis
-        stock_data_lda_df = pd.concat([self.stock_data[self.id_columns].reset_index(drop=True),
+        stock_data_lda_df = pd.concat([stock_data[self.id_columns].reset_index(drop=True),
                                        stock_data_lda_df,
-                                       self.stock_data[self.ret_col+['ret_class']].reset_index(drop=True)], axis=1)
+                                       stock_data[self.ret_col+['ret_class']].reset_index(drop=True)], axis=1)
         
 
         # Visualization of the LDA components
@@ -127,18 +134,118 @@ class DimensionRedux(DataPrep):
     
     def svd_fit(self):
         """_summary_
+        Perform SVD to identify directions with maximum variance in the dataset.
         """
-        pass
+        # Remove missing values
+        stock_data = self.data_clean_na(df=self.stock_data).copy()
+        # Set Return class
+        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        
+        # Check for missing values 
+        if stock_data.isnull().any().any():
+            raise ValueError('Missing Values are not allowed in SVD Method')
+        
+        # Choose the number of components, for example:
+        n_components = min(stock_data[self.feature_col].shape) - 1  # Or some other logic
+        
+        # Model Fitting and generate compressed components
+        svd = TruncatedSVD(n_components=n_components)   
+        stock_df_svd_model_obj = svd.fit(stock_data[self.feature_col])
+        
+        # Construct new reduced df stat 
+        svd_index_val = np.arange(0, len(stock_df_svd_model_obj.explained_variance_ratio_), 1)
+        svd_index_rename = [f'comp_{i}' for i in svd_index_val]
+        svd_var = stock_df_svd_model_obj.explained_variance_ratio_
+        svd_cumu_var = stock_df_svd_model_obj.explained_variance_ratio_.cumsum()
+        svd_result_df = pd.DataFrame([svd_index_val, svd_index_rename, svd_var, svd_cumu_var]).T
+        svd_result_df.columns = ['index_values', 'renamed_columns', 'expl_var', 'expl_var_cumu']
+        
+        # Find out when did we reach 80% explanation of variance
+        svd_result_df_80 = svd_result_df[svd_result_df.expl_var_cumu<=0.8].copy()
+        stock_df_trans = pd.DataFrame(data=svd.transform(stock_data[self.feature_col]))
+        stock_df_trans_80 = stock_df_trans[svd_result_df_80.index_values]
+        stock_df_trans_80.columns = svd_result_df_80.renamed_columns
+        stock_df_trans_80 = pd.concat([stock_data[self.id_columns].reset_index(), stock_df_trans_80.reset_index(), stock_data[self.ret_col+['ret_class']].reset_index()], axis=1)
+        
+        
+        # Visualization of the singular values
+        plt.figure(figsize=(10, 6))
+        plt.bar(range(stock_df_svd_model_obj.n_components), stock_df_svd_model_obj.explained_variance_ratio_.cumsum())
+        plt.xlabel('SVD Components')
+        plt.ylabel('Explained Variance Ratio')
+        plt.title('Explained Variance by SVD Components')
+        plt.show()
+        
+        # Visualized component 0 and component 1
+        plt.scatter(stock_df_trans_80['comp_0'],stock_df_trans_80['comp_1'],c=stock_df_trans_80['ret_class'],edgecolors='k',alpha=0.75,s=150)
+        plt.grid(True)
+        plt.title("Class separation using first two principal components\n",fontsize=20)
+        plt.xlabel("Principal component-1",fontsize=15)
+        plt.ylabel("Principal component-2",fontsize=15)
+        plt.show()
+        
+        return stock_df_trans_80
     
     def fa_fit(self):
         """_summary_
-        """
+        Reducing the dimensionality of the dataset by identifying latent factors that explain the most variance in the data."""
+        # Remove missing values
+        stock_data = self.data_clean_na(df=self.stock_data).copy()
+        # Set Return class
+        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+
+        # Check for missing values
+        if stock_data.isnull().any().any():
+            raise ValueError('Missing Values are not allowed in FA Method')
+
+        # Model Fitting and generate compressed components
+        fa = FactorAnalysis()
+        fa.fit(stock_data[self.feature_col])
+        
+        # Transform data using the FA model
+        stock_data_transformed = fa.transform(stock_data[self.feature_col])
+
+        # Construct new reduced DataFrame for statistics
+        fa_index_val = np.arange(0, len(fa.components_), 1)
+        fa_index_rename = [f'factor_{i}' for i in fa_index_val]
+        fa_var = np.var(stock_data_transformed, axis=0)
+        fa_cumu_var = np.cumsum(fa_var)
+  
+        # Visualization of Explained Variance
+        plt.figure(figsize=(10, 6))
+        plt.bar(fa_index_val, fa_var, color='blue', label='Individual Explained Variance')
+        plt.plot(fa_index_val, fa_cumu_var, color='red', marker='o', linestyle='-', label='Cumulative Explained Variance')
+        plt.xlabel('Factors')
+        plt.ylabel('Explained Variance')
+        plt.title('Explained Variance by Factor')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # Scatter plot for the first two factors
+        plt.figure(figsize=(10, 6))
+        plt.scatter(stock_data_transformed[:, 0], stock_data_transformed[:, 1], c=stock_data['ret_class'], cmap='viridis', edgecolor='k', alpha=0.75)
+        plt.colorbar(label='Return Class')
+        plt.xlabel('Factor 0')
+        plt.ylabel('Factor 1')
+        plt.title('Scatter Plot of First Two Factors')
+        plt.grid(True)
+        plt.show()
+
+        # Create a DataFrame for the transformed data and merge with original identifiers and return classes
+        stock_data_factors_df = pd.DataFrame(stock_data_transformed, columns=fa_index_rename)
+        stock_data_factors_df = pd.concat([stock_data[self.id_columns].reset_index(drop=True),
+                                           stock_data_factors_df,
+                                           stock_data[self.ret_col + ['ret_class']].reset_index(drop=True)], axis=1)
+
+        return stock_data_factors_df
+        
         
 if __name__ == "__main__":
     dr_obj = DimensionRedux()
     dr_obj.data_initialization()
     dr_obj.data_construction()
-    dr_obj.lda_fit()
+    dr_obj.fa_fit()
     # data initialized
     # DataFrame size: (4135225, 135)
     # data construction complete
