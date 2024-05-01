@@ -20,7 +20,7 @@ class DimensionRedux(DataPrep):
         df = df.dropna(axis=0)
         return df
         
-    def generate_ret_class(self, df, n=5):
+    def generate_ret_class(self, df, n=4):
         class_bins = [-9999999]+[df['ret_exc_lead1m'].quantile(i) for i in np.arange(0,1,1/n)]+[9999999999]
         df['ret_class'] = pd.cut(df['ret_exc_lead1m'], class_bins, labels=[i+1 for i in range(n+1)]).astype(int)
         return df
@@ -32,7 +32,7 @@ class DimensionRedux(DataPrep):
         # Remove missing values
         stock_data = self.data_clean_na(df=self.stock_data).copy()
         # Set Return class
-        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        stock_data = self.generate_ret_class(df=stock_data).copy()
         
         # Check for missing values 
         if stock_data.isnull().any().any():
@@ -94,7 +94,7 @@ class DimensionRedux(DataPrep):
         # Remove missing values
         stock_data = self.data_clean_na(df=self.stock_data).copy()
         # Set Return class
-        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        stock_data = self.generate_ret_class(df=stock_data).copy()
         
         # Check for missing values 
         if stock_data.isnull().any().any():
@@ -139,7 +139,7 @@ class DimensionRedux(DataPrep):
         # Remove missing values
         stock_data = self.data_clean_na(df=self.stock_data).copy()
         # Set Return class
-        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        stock_data = self.generate_ret_class(df=stock_data).copy()
         
         # Check for missing values 
         if stock_data.isnull().any().any():
@@ -192,7 +192,7 @@ class DimensionRedux(DataPrep):
         # Remove missing values
         stock_data = self.data_clean_na(df=self.stock_data).copy()
         # Set Return class
-        stock_data = self.generate_ret_class(df=stock_data, n=5).copy()
+        stock_data = self.generate_ret_class(df=stock_data).copy()
 
         # Check for missing values
         if stock_data.isnull().any().any():

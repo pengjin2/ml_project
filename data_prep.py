@@ -6,7 +6,7 @@ class DataPrep(object):
     def __init__(self):
         self.base_path = './data/'
         self.id_columns = ['date', 'id', 'ticker', 'sector', 'size_grp']
-        self.ret_col = ['ret_exc_lead1m']
+        self.ret_col = ['ret_exc_lead1m', 'ret_exc_lead1m_std']
         self.feature_col = None
     
     def _display_df_size(func):
@@ -18,7 +18,7 @@ class DataPrep(object):
         return wrapper
     
     @_display_df_size
-    def data_initialization(self):
+    def data_initialization(self, return_df = False):
         """_summary_
         Read in relevant data
         """
@@ -27,9 +27,11 @@ class DataPrep(object):
         self.unique_ticker_sector_mapper = pd.read_csv(f'{self.base_path}ticker2sector.csv')[['Symbol', 'Sector']].to_dict('records')
         
         print('data initialized')
+        if return_df:
+            return self.stock_data
     
     @_display_df_size
-    def data_construction(self):
+    def data_construction(self, return_df = False):
         """_summary_
         Since the data I expected was not in one place, therefore I had to improvise and remap relevant information. Including dropping some records that I don't recognize
         """
@@ -69,6 +71,7 @@ class DataPrep(object):
         # Normalize all numerical data
         scaler = StandardScaler()
         self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]]  = scaler.fit_transform(self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]])
+        self.stock_data['ret_exc_lead1m_std'] = pd.DataFrame(scaler.fit_transform(self.stock_data[['ret_exc_lead1m']]))
         
         # Rearrange data
         self.feature_col = [item for item in self.stock_data.columns if item not in (self.id_columns+self.ret_col)]
@@ -76,6 +79,8 @@ class DataPrep(object):
         self.stock_data = self.stock_data[self.id_columns+self.feature_col+self.ret_col]
         
         print('data construction complete')
+        if return_df:
+            return self.stock_data
     
     
     def data_slicing(self):
