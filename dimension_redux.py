@@ -20,7 +20,7 @@ class DimensionRedux(DataPrep):
         df = df.dropna(axis=0)
         return df
         
-    def generate_ret_class(self, df, n=4):
+    def generate_ret_class(self, df, n=2):
         class_bins = [-9999999]+[df['ret_exc_lead1m'].quantile(i) for i in np.arange(0,1,1/n)]+[9999999999]
         df['ret_class'] = pd.cut(df['ret_exc_lead1m'], class_bins, labels=[i+1 for i in range(n+1)]).astype(int)
         return df
@@ -76,12 +76,36 @@ class DimensionRedux(DataPrep):
         plt.ylabel("Cumu Explained variance ratio",fontsize=15)
         plt.show()
         
-        # Visualized component 0 and component 1
-        plt.scatter(stock_df_trans_80['comp_0'],stock_df_trans_80['comp_1'],c=stock_df_trans_80['ret_class'],edgecolors='k',alpha=0.75,s=150)
+        # Assuming stock_df_trans_80 is already defined and contains 'comp_0' and 'comp_1'
+
+        # Calculate IQR for 'comp_0'
+        q1_comp0 = stock_df_trans_80['comp_0'].quantile(0.05)
+        q3_comp0 = stock_df_trans_80['comp_0'].quantile(0.95)
+        iqr_comp0 = q3_comp0 - q1_comp0
+
+        # Calculate IQR for 'comp_1'
+        q1_comp1 = stock_df_trans_80['comp_1'].quantile(0.05)
+        q3_comp1 = stock_df_trans_80['comp_1'].quantile(0.95)
+        iqr_comp1 = q3_comp1 - q1_comp1
+
+        # Define bounds for outliers
+        lower_bound_comp0 = q1_comp0 - 1.5 * iqr_comp0
+        upper_bound_comp0 = q3_comp0 + 1.5 * iqr_comp0
+        lower_bound_comp1 = q1_comp1 - 1.5 * iqr_comp1
+        upper_bound_comp1 = q3_comp1 + 1.5 * iqr_comp1
+
+        # Filter out outliers
+        filtered_df = stock_df_trans_80[
+    (stock_df_trans_80['comp_0'] >= lower_bound_comp0) & (stock_df_trans_80['comp_0'] <= upper_bound_comp0) &
+    (stock_df_trans_80['comp_1'] >= lower_bound_comp1) & (stock_df_trans_80['comp_1'] <= upper_bound_comp1)
+]
+        
+        # Visualized component 0 and component 1 without outliers
+        plt.scatter(filtered_df['comp_0'], filtered_df['comp_1'], c=filtered_df['ret_class'], edgecolors='k', alpha=0.75, s=150)
         plt.grid(True)
-        plt.title("Class separation using first two principal components\n",fontsize=20)
-        plt.xlabel("Principal component-1",fontsize=15)
-        plt.ylabel("Principal component-2",fontsize=15)
+        plt.title("Class separation using first two principal components\n(no outliers)", fontsize=20)
+        plt.xlabel("Principal component-1", fontsize=15)
+        plt.ylabel("Principal component-2", fontsize=15)
         plt.show()
         
         return stock_df_trans_80
@@ -176,12 +200,34 @@ class DimensionRedux(DataPrep):
         plt.title('Explained Variance by SVD Components')
         plt.show()
         
-        # Visualized component 0 and component 1
-        plt.scatter(stock_df_trans_80['comp_0'],stock_df_trans_80['comp_1'],c=stock_df_trans_80['ret_class'],edgecolors='k',alpha=0.75,s=150)
+        # Calculate IQR for 'comp_0'
+        q1_comp0 = stock_df_trans_80['comp_0'].quantile(0.05)
+        q3_comp0 = stock_df_trans_80['comp_0'].quantile(0.95)
+        iqr_comp0 = q3_comp0 - q1_comp0
+
+        # Calculate IQR for 'comp_1'
+        q1_comp1 = stock_df_trans_80['comp_1'].quantile(0.05)
+        q3_comp1 = stock_df_trans_80['comp_1'].quantile(0.95)
+        iqr_comp1 = q3_comp1 - q1_comp1
+
+        # Define bounds for outliers
+        lower_bound_comp0 = q1_comp0 - 1.5 * iqr_comp0
+        upper_bound_comp0 = q3_comp0 + 1.5 * iqr_comp0
+        lower_bound_comp1 = q1_comp1 - 1.5 * iqr_comp1
+        upper_bound_comp1 = q3_comp1 + 1.5 * iqr_comp1
+
+        # Filter out outliers
+        filtered_df = stock_df_trans_80[
+    (stock_df_trans_80['comp_0'] >= lower_bound_comp0) & (stock_df_trans_80['comp_0'] <= upper_bound_comp0) &
+    (stock_df_trans_80['comp_1'] >= lower_bound_comp1) & (stock_df_trans_80['comp_1'] <= upper_bound_comp1)
+]
+        
+        # Visualized component 0 and component 1 without outliers
+        plt.scatter(filtered_df['comp_0'], filtered_df['comp_1'], c=filtered_df['ret_class'], edgecolors='k', alpha=0.75, s=150)
         plt.grid(True)
-        plt.title("Class separation using first two principal components\n",fontsize=20)
-        plt.xlabel("Principal component-1",fontsize=15)
-        plt.ylabel("Principal component-2",fontsize=15)
+        plt.title("Class separation using first two principal components\n(no outliers)", fontsize=20)
+        plt.xlabel("Principal component-1", fontsize=15)
+        plt.ylabel("Principal component-2", fontsize=15)
         plt.show()
         
         return stock_df_trans_80

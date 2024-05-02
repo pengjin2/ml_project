@@ -6,7 +6,7 @@ class DataPrep(object):
     def __init__(self):
         self.base_path = './data/'
         self.id_columns = ['date', 'id', 'ticker', 'sector', 'size_grp']
-        self.ret_col = ['ret_exc_lead1m', 'ret_exc_lead1m_std']
+        self.ret_col = ['ret_exc_lead1m']
         self.feature_col = None
     
     def _display_df_size(func):
@@ -31,7 +31,7 @@ class DataPrep(object):
             return self.stock_data
     
     @_display_df_size
-    def data_construction(self, return_df = False):
+    def data_construction(self, return_df = False, na_pct=0.2):
         """_summary_
         Since the data I expected was not in one place, therefore I had to improvise and remap relevant information. Including dropping some records that I don't recognize
         """
@@ -68,10 +68,15 @@ class DataPrep(object):
         # Drop missing values because we won't be able to analyze missing sector data
         self.stock_data = self.stock_data.dropna(subset=['sector'])
         
+        # Remove columns with too many missing values
+        missing_proportion = self.stock_data.isnull().sum() / len(self.stock_data)
+        rm_cols = missing_proportion[missing_proportion > na_pct].index
+        self.stock_data = self.stock_data[[col for col in self.stock_data.columns if col not in rm_cols]] 
+        
         # Normalize all numerical data
         scaler = StandardScaler()
         self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]]  = scaler.fit_transform(self.stock_data[[col for col in self.stock_data.columns if col not in (self.id_columns+self.ret_col)]])
-        self.stock_data['ret_exc_lead1m_std'] = pd.DataFrame(scaler.fit_transform(self.stock_data[['ret_exc_lead1m']]))
+        # self.stock_data['ret_exc_lead1m_std'] = pd.DataFrame(scaler.fit_transform(self.stock_data[['ret_exc_lead1m']]))
         
         # Rearrange data
         self.feature_col = [item for item in self.stock_data.columns if item not in (self.id_columns+self.ret_col)]
